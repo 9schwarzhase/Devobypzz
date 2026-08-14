@@ -169,7 +169,6 @@
             border-radius: 2px;
         }
 
-        /* GAYA TOMBOL ACTION (APPLY & DOWNLOAD) */
         .action-grid {
             display: flex;
             gap: 15px;
@@ -293,7 +292,6 @@
             </div>
         </div>
 
-        <!-- PANEL BARU: EXPORT -->
         <div class="panel">
             <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 10px;">EXPORT AUDIO</h2>
             <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 20px;">
@@ -308,7 +306,6 @@
     </div>
 
     <script>
-        // DOM Elements
         const fileInput = document.getElementById('audio-upload');
         const uploadArea = document.querySelector('.upload-area');
         const audioPlayer = document.getElementById('audio-player');
@@ -335,18 +332,23 @@
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
 
-        // Variables
         let audioCtx, source, analyser, bufferLength, dataArray;
         let bassFilter, midFilter, trebleFilter, volumeNode;
         let convolver, wetGain, dryGain;
         let pannerNode, delayNode, delayMixGain, delayFeedback, distNode, muffleFilter;
         
-        let originalAudioBuffer = null; // Menyimpan data mentah lagu untuk dirender ulang nanti
-        let finalWavBlob = null; // Menyimpan hasil akhir lagu yang siap diunduh
+        let originalAudioBuffer = null; 
+        let finalWavBlob = null; 
 
         uploadArea.addEventListener('click', () => fileInput.click());
 
-        // LOGIKA UPLOAD DIPERBARUI UNTUK MENYIMPAN DATA MENTAH (BUFFER)
+        // FIX: MEMBANGUNKAN AUDIO ENGINE SAAT TOMBOL PLAY DITEKAN
+        audioPlayer.addEventListener('play', () => {
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        });
+
         fileInput.addEventListener('change', function() {
             const file = this.files[0];
             if (file) {
@@ -361,7 +363,7 @@
                 reader.onload = function(e) {
                     audioCtx.decodeAudioData(e.target.result, function(buffer) {
                         originalAudioBuffer = buffer;
-                        applyBtn.disabled = false; // Tombol Apply aktif setelah file terbaca
+                        applyBtn.disabled = false; 
                         statusText.innerText = "Audio siap diedit.";
                         setupWebAudio();
                     });
@@ -370,7 +372,6 @@
             }
         });
 
-        // (Fungsi efek dan routing audio real-time sama seperti sebelumnya)
         function createReverbBuffer(ctx) {
             const length = ctx.sampleRate * 2.5;
             const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
@@ -398,7 +399,7 @@
         }
 
         function setupWebAudio() {
-            if (source) return; // Mencegah pemanggilan ganda
+            if (source) return; 
             source = audioCtx.createMediaElementSource(audioPlayer);
             
             analyser = audioCtx.createAnalyser();
@@ -422,7 +423,6 @@
             dryGain = audioCtx.createGain(); wetGain = audioCtx.createGain(); wetGain.gain.value = 0; 
             volumeNode = audioCtx.createGain();
 
-            // Routing
             source.connect(muffleFilter); muffleFilter.connect(distNode); distNode.connect(bassFilter);
             bassFilter.connect(midFilter); midFilter.connect(trebleFilter); trebleFilter.connect(pannerNode);
 
@@ -451,7 +451,6 @@
             canvasCtx.lineTo(canvas.width, canvas.height / 2); canvasCtx.stroke();
         }
 
-        // SLIDER EVENTS (Hanya update visual teks di sini agar tidak panjang, fungsinya tetap sama)
         speedSlider.addEventListener('input', (e) => { audioPlayer.playbackRate = e.target.value; document.getElementById('speed-val').innerText = e.target.value + 'x'; });
         bassSlider.addEventListener('input', (e) => { if(bassFilter) bassFilter.gain.value = e.target.value; document.getElementById('bass-val').innerText = e.target.value + ' dB'; });
         midSlider.addEventListener('input', (e) => { if(midFilter) midFilter.gain.value = e.target.value; document.getElementById('mid-val').innerText = e.target.value + ' dB'; });
@@ -462,11 +461,6 @@
         distSlider.addEventListener('input', (e) => { if(distNode) distNode.curve = makeDistortionCurve(parseInt(e.target.value) * 5); document.getElementById('dist-val').innerText = e.target.value + '%'; });
         muffleSlider.addEventListener('input', (e) => { if(muffleFilter) muffleFilter.frequency.value = 22050 * Math.pow(300 / 22050, e.target.value / 100); document.getElementById('muffle-val').innerText = e.target.value + '%'; });
         volumeSlider.addEventListener('input', (e) => { if(volumeNode) volumeNode.gain.value = e.target.value / 100; document.getElementById('volume-val').innerText = e.target.value + '%'; });
-
-
-        // ==========================================================
-        // LOGIKA BARU: APPLY EFFECT & EXPORT (OFFLINE AUDIO CONTEXT)
-        // ==========================================================
         
         applyBtn.addEventListener('click', async () => {
             if (!originalAudioBuffer) return;
@@ -475,20 +469,16 @@
             applyBtn.disabled = true;
             downloadBtn.disabled = true;
 
-            // Jika speed diubah (misal 0.5x), lagu jadi lebih panjang. Kita hitung durasi barunya.
             const speed = parseFloat(speedSlider.value);
             const duration = originalAudioBuffer.duration / speed;
             const sampleRate = originalAudioBuffer.sampleRate;
 
-            // Membuat "Studio Virtual" di latar belakang
             const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
             
-            // Masukkan lagu asli ke studio virtual
             const offlineSource = offlineCtx.createBufferSource();
             offlineSource.buffer = originalAudioBuffer;
             offlineSource.playbackRate.value = speed;
 
-            // --- REKREASI SEMUA EFEK DI STUDIO VIRTUAL ---
             const oMuffle = offlineCtx.createBiquadFilter(); oMuffle.type = 'lowpass'; oMuffle.frequency.value = muffleFilter.frequency.value;
             const oDist = offlineCtx.createWaveShaper(); oDist.curve = distNode.curve; oDist.oversample = '4x';
             const oBass = offlineCtx.createBiquadFilter(); oBass.type = 'lowshelf'; oBass.frequency.value = 150; oBass.gain.value = bassSlider.value;
@@ -505,7 +495,6 @@
             const oWet = offlineCtx.createGain(); oWet.gain.value = wetGain.gain.value;
             const oVol = offlineCtx.createGain(); oVol.gain.value = volumeSlider.value / 100;
 
-            // Menyambungkan kabel studio virtual
             offlineSource.connect(oMuffle); oMuffle.connect(oDist); oDist.connect(oBass);
             oBass.connect(oMid); oMid.connect(oTreble); oTreble.connect(oPanner);
 
@@ -518,16 +507,13 @@
 
             offlineSource.start();
 
-            // MULAI RENDER!
             try {
                 const renderedBuffer = await offlineCtx.startRendering();
-                
-                // Ubah hasil render (AudioBuffer) menjadi file WAV
                 finalWavBlob = audioBufferToWav(renderedBuffer);
                 
                 statusText.innerText = "Selesai! Lagu siap diunduh.";
                 applyBtn.disabled = false;
-                downloadBtn.disabled = false; // Tombol Download diaktifkan!
+                downloadBtn.disabled = false; 
                 
             } catch (err) {
                 console.error(err);
@@ -548,7 +534,6 @@
             window.URL.revokeObjectURL(url);
         });
 
-        // FUNGSI KONVERTER AUDIO KE FILE .WAV (Algoritma Standar Vanilla JS)
         function audioBufferToWav(buffer) {
             let numOfChan = buffer.numberOfChannels,
                 length = buffer.length * numOfChan * 2 + 44,
