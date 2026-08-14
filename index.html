@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DEVOBYPZZ | Audio Studio</title>
     <style>
-        /* CSS: PENGATURAN WARNA & GAYA MONOKROM */
         :root {
             --bg-color: #0a0a0a;
             --sidebar-bg: #000000;
@@ -30,7 +29,6 @@
             min-height: 100vh;
         }
 
-        /* SIDEBAR KIRI */
         .sidebar {
             width: 250px;
             background-color: var(--sidebar-bg);
@@ -63,7 +61,6 @@
             color: var(--text-main);
         }
 
-        /* AREA UTAMA (KANAN) */
         .main-content {
             flex: 1;
             padding: 50px;
@@ -85,7 +82,6 @@
             letter-spacing: 1px;
         }
 
-        /* PANEL GAYA DATAR */
         .panel {
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
@@ -94,7 +90,6 @@
             margin-bottom: 30px;
         }
 
-        /* AREA UPLOAD */
         .upload-area {
             border: 2px dashed var(--border-color);
             border-radius: 8px;
@@ -108,7 +103,13 @@
             border-color: var(--text-dim);
         }
 
-        /* GRID EQUALIZER */
+        /* Styling Audio Player bawaan */
+        audio {
+            width: 100%;
+            margin-top: 20px;
+            outline: none;
+        }
+
         .eq-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -130,7 +131,6 @@
             justify-content: space-between;
         }
 
-        /* STYLING SLIDER (Monokrom) */
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -158,7 +158,6 @@
 </head>
 <body>
 
-    <!-- SIDEBAR -->
     <div class="sidebar">
         <div class="brand">DEVOBYPZZ<br><span style="font-size: 10px; color: var(--text-dim); letter-spacing: 1px;">STUDIO BYPASS</span></div>
         <a href="#" class="menu-item">Dashboard</a>
@@ -166,56 +165,118 @@
         <a href="#" class="menu-item">Presets</a>
     </div>
 
-    <!-- MAIN CONTENT -->
     <div class="main-content">
         <div class="header-title">Welcome Back</div>
         <h1>START YOUR MIX</h1>
 
-        <!-- PANEL UPLOAD -->
         <div class="panel">
             <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 20px;">STEP 01 - UPLOAD AUDIO</h2>
             <div class="upload-area">
                 <p style="font-weight: bold; margin-bottom: 10px;">DROP YOUR AUDIO HERE</p>
-                <p style="font-size: 12px; color: var(--text-dim);">or click to browse (MP3, WAV, FLAC)</p>
-                <input type="file" id="audio-upload" style="display: none;" multiple accept="audio/*">
+                <p style="font-size: 12px; color: var(--text-dim);">or click to browse</p>
+                <input type="file" id="audio-upload" style="display: none;" accept="audio/*">
+            </div>
+            
+            <!-- Elemen Audio Player yang baru ditambahkan -->
+            <div id="player-container" style="display: none;">
+                <audio id="audio-player" controls></audio>
             </div>
         </div>
 
-        <!-- PANEL EQUALIZER -->
         <div class="panel">
             <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 30px;">CORE CONTROLS (EQUALIZER)</h2>
             <div class="eq-grid">
-                <!-- Kolom Kiri -->
                 <div class="control-group">
-                    <label>BASS <span>0 dB</span></label>
-                    <input type="range" min="-12" max="12" value="0" id="bass-slider">
-                </div>
-                <!-- Kolom Kanan -->
-                <div class="control-group">
-                    <label>TREBLE <span>0 dB</span></label>
-                    <input type="range" min="-12" max="12" value="0" id="treble-slider">
+                    <label>BASS <span id="bass-val">0 dB</span></label>
+                    <input type="range" min="-15" max="15" value="0" id="bass-slider">
                 </div>
                 <div class="control-group">
-                    <label>PITCH <span>0 ST</span></label>
-                    <input type="range" min="-12" max="12" value="0" id="pitch-slider">
+                    <label>TREBLE <span id="treble-val">0 dB</span></label>
+                    <input type="range" min="-15" max="15" value="0" id="treble-slider">
                 </div>
                 <div class="control-group">
-                    <label>SPEED <span>1.0x</span></label>
+                    <label>SPEED <span id="speed-val">1.0x</span></label>
                     <input type="range" min="0.5" max="2" value="1" step="0.1" id="speed-slider">
                 </div>
             </div>
         </div>
-
     </div>
 
+    <!-- LOGIKA JAVASCRIPT -->
     <script>
-        // Nanti kode logika pemrosesan suara JavaScript-nya kita taruh di sini!
-        // Untuk sekarang, kita buat area upload bisa diklik
-        const uploadArea = document.querySelector('.upload-area');
         const fileInput = document.getElementById('audio-upload');
+        const uploadArea = document.querySelector('.upload-area');
+        const audioPlayer = document.getElementById('audio-player');
+        const playerContainer = document.getElementById('player-container');
 
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        // Referensi Slider
+        const bassSlider = document.getElementById('bass-slider');
+        const trebleSlider = document.getElementById('treble-slider');
+        const speedSlider = document.getElementById('speed-slider');
+
+        // Variabel Web Audio API
+        let audioCtx;
+        let source;
+        let bassFilter;
+        let trebleFilter;
+
+        // 1. Membuka File Explorer saat area ditekan
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // 2. Menangkap file yang diunggah dan memutarnya
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                // Membuat URL sementara di memori browser
+                const fileURL = URL.createObjectURL(file);
+                audioPlayer.src = fileURL;
+                playerContainer.style.display = 'block';
+                
+                // Inisialisasi Audio API (hanya bisa jalan setelah ada interaksi pengguna)
+                setupWebAudio();
+            }
+        });
+
+        // 3. Menghubungkan Audio Player dengan Node Filter (Equalizer)
+        function setupWebAudio() {
+            if (!audioCtx) {
+                // Membuat lingkungan audio
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Mengambil sumber suara dari tag <audio>
+                source = audioCtx.createMediaElementSource(audioPlayer);
+                
+                // Membuat Filter Bass (Lowshelf)
+                bassFilter = audioCtx.createBiquadFilter();
+                bassFilter.type = 'lowshelf';
+                bassFilter.frequency.value = 150; // Frekuensi rendah
+
+                // Membuat Filter Treble (Highshelf)
+                trebleFilter = audioCtx.createBiquadFilter();
+                trebleFilter.type = 'highshelf';
+                trebleFilter.frequency.value = 4000; // Frekuensi tinggi
+
+                // Menyambungkan kabel virtual: Sumber -> Bass -> Treble -> Speaker
+                source.connect(bassFilter);
+                bassFilter.connect(trebleFilter);
+                trebleFilter.connect(audioCtx.destination);
+            }
+        }
+
+        // 4. Membaca perubahan pada Slider
+        bassSlider.addEventListener('input', (e) => {
+            if (bassFilter) bassFilter.gain.value = e.target.value;
+            document.getElementById('bass-val').innerText = e.target.value + ' dB';
+        });
+
+        trebleSlider.addEventListener('input', (e) => {
+            if (trebleFilter) trebleFilter.gain.value = e.target.value;
+            document.getElementById('treble-val').innerText = e.target.value + ' dB';
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            audioPlayer.playbackRate = e.target.value;
+            document.getElementById('speed-val').innerText = e.target.value + 'x';
         });
     </script>
 </body>
