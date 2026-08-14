@@ -231,7 +231,7 @@
                 <input type="file" id="audio-upload" style="display: none;" accept="audio/*">
             </div>
             <div id="player-container" style="display: none;">
-                <audio id="audio-player" controls></audio>
+                <audio id="audio-player" controls crossorigin="anonymous"></audio>
             </div>
         </div>
 
@@ -342,13 +342,14 @@
 
         uploadArea.addEventListener('click', () => fileInput.click());
 
-        // FIX: MEMBANGUNKAN AUDIO ENGINE SAAT TOMBOL PLAY DITEKAN
+        // Mencegah peramban menidurkan sistem audio
         audioPlayer.addEventListener('play', () => {
             if (audioCtx && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
         });
 
+        // LOGIKA UPLOAD YANG DIPERBAIKI
         fileInput.addEventListener('change', function() {
             const file = this.files[0];
             if (file) {
@@ -356,16 +357,25 @@
                 audioPlayer.src = fileURL;
                 playerContainer.style.display = 'block';
                 
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                // 1. Langsung inisialisasi Audio Context agar bisa diputar
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
                 
-                statusText.innerText = "Membaca file audio...";
+                // 2. Langsung sambungkan kabel efek secara Real-Time
+                setupWebAudio();
+                
+                // 3. Proses background untuk fitur Download (Tidak menahan Playback)
+                statusText.innerText = "Mempersiapkan data export di latar belakang... (Anda sudah bisa memutar lagunya)";
+                applyBtn.disabled = true;
+                
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     audioCtx.decodeAudioData(e.target.result, function(buffer) {
                         originalAudioBuffer = buffer;
                         applyBtn.disabled = false; 
-                        statusText.innerText = "Audio siap diedit.";
-                        setupWebAudio();
+                        statusText.innerText = "Audio siap diedit & di-export.";
                     });
                 };
                 reader.readAsArrayBuffer(file);
@@ -399,7 +409,8 @@
         }
 
         function setupWebAudio() {
-            if (source) return; 
+            if (source) return; // Mencegah pembuatan double-kabel yang bikin error
+            
             source = audioCtx.createMediaElementSource(audioPlayer);
             
             analyser = audioCtx.createAnalyser();
