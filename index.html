@@ -231,7 +231,8 @@
                 <input type="file" id="audio-upload" style="display: none;" accept="audio/*">
             </div>
             <div id="player-container" style="display: none;">
-                <audio id="audio-player" controls crossorigin="anonymous"></audio>
+                <!-- Dihapus: crossorigin="anonymous" -->
+                <audio id="audio-player" controls></audio>
             </div>
         </div>
 
@@ -349,11 +350,15 @@
             }
         });
 
-        // LOGIKA UPLOAD YANG DIPERBAIKI
+        // LOGIKA UPLOAD
         fileInput.addEventListener('change', function() {
             const file = this.files[0];
             if (file) {
                 const fileURL = URL.createObjectURL(file);
+                
+                // Mencegah error CORS untuk file lokal
+                audioPlayer.removeAttribute('crossorigin');
+
                 audioPlayer.src = fileURL;
                 playerContainer.style.display = 'block';
                 
@@ -366,7 +371,7 @@
                 // 2. Langsung sambungkan kabel efek secara Real-Time
                 setupWebAudio();
                 
-                // 3. Proses background untuk fitur Download (Tidak menahan Playback)
+                // 3. Proses background untuk fitur Download
                 statusText.innerText = "Mempersiapkan data export di latar belakang... (Anda sudah bisa memutar lagunya)";
                 applyBtn.disabled = true;
                 
@@ -409,7 +414,7 @@
         }
 
         function setupWebAudio() {
-            if (source) return; // Mencegah pembuatan double-kabel yang bikin error
+            if (source) return; // Mencegah pembuatan double-kabel
             
             source = audioCtx.createMediaElementSource(audioPlayer);
             
