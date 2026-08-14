@@ -122,7 +122,7 @@
         .eq-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
+            gap: 25px 30px; /* Jarak vertikal 25px, horizontal 30px */
         }
 
         .control-group {
@@ -131,9 +131,9 @@
             gap: 10px;
         }
 
-        /* Mengatur agar slider volume melintang penuh di bawah */
         .vol-control {
             grid-column: 1 / -1;
+            margin-top: 10px;
         }
 
         .control-group label {
@@ -220,11 +220,11 @@
         </div>
 
         <div class="panel">
-            <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 30px;">CORE CONTROLS (EQUALIZER)</h2>
+            <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 30px;">CORE CONTROLS (PRO FX)</h2>
             <canvas id="waveform"></canvas>
             
             <div class="eq-grid">
-                <!-- Baris 1 -->
+                <!-- Baris 1: Dasar -->
                 <div class="control-group">
                     <label>SPEED <span id="speed-val">1.0x</span></label>
                     <input type="range" min="0.5" max="2" value="1" step="0.1" id="speed-slider">
@@ -234,7 +234,7 @@
                     <input type="range" min="-12" max="12" value="0" id="pitch-slider">
                 </div>
                 
-                <!-- Baris 2 -->
+                <!-- Baris 2: Equalizer Dasar -->
                 <div class="control-group">
                     <label>BASS <span id="bass-val">0 dB</span></label>
                     <input type="range" min="-15" max="15" value="0" id="bass-slider">
@@ -244,19 +244,39 @@
                     <input type="range" min="-15" max="15" value="0" id="mid-slider">
                 </div>
                 
-                <!-- Baris 3 -->
+                <!-- Baris 3: Equalizer & Ruang -->
                 <div class="control-group">
                     <label>TREBLE <span id="treble-val">0 dB</span></label>
                     <input type="range" min="-15" max="15" value="0" id="treble-slider">
                 </div>
                 <div class="control-group">
-                    <label>REVERB <span id="reverb-val">0%</span></label>
+                    <label>REVERB (GEMA) <span id="reverb-val">0%</span></label>
                     <input type="range" min="0" max="100" value="0" id="reverb-slider">
                 </div>
 
-                <!-- Baris 4 (Volume membentang) -->
+                <!-- Baris 4: Dimensi & Pantulan -->
+                <div class="control-group">
+                    <label>PANNING (L/R) <span id="pan-val">CENTER</span></label>
+                    <input type="range" min="-1" max="1" value="0" step="0.1" id="pan-slider">
+                </div>
+                <div class="control-group">
+                    <label>DELAY (PANTULAN) <span id="delay-val">0%</span></label>
+                    <input type="range" min="0" max="100" value="0" id="delay-slider">
+                </div>
+
+                <!-- Baris 5: Distorsi & Filter -->
+                <div class="control-group">
+                    <label>DISTORTION <span id="dist-val">0%</span></label>
+                    <input type="range" min="0" max="100" value="0" id="dist-slider">
+                </div>
+                <div class="control-group">
+                    <label>MUFFLE (LOW-PASS) <span id="muffle-val">0%</span></label>
+                    <input type="range" min="0" max="100" value="0" id="muffle-slider">
+                </div>
+
+                <!-- Baris 6: Volume Master -->
                 <div class="control-group vol-control">
-                    <label>VOLUME <span id="volume-val">100%</span></label>
+                    <label>MASTER VOLUME <span id="volume-val">100%</span></label>
                     <input type="range" min="0" max="200" value="100" id="volume-slider">
                 </div>
             </div>
@@ -266,8 +286,8 @@
             <h2 style="font-size: 14px; letter-spacing: 1.5px; margin-bottom: 20px;">QUICK PRESETS</h2>
             <div class="preset-grid">
                 <button class="preset-btn" data-preset="clean">Clean Upload</button>
-                <button class="preset-btn" data-preset="bassBoost">Bass Boost</button>
-                <button class="preset-btn" data-preset="slowed">Slowed + Reverb</button>
+                <button class="preset-btn" data-preset="lofi">Lo-Fi Radio</button>
+                <button class="preset-btn" data-preset="8d">8D Concert</button>
             </div>
         </div>
     </div>
@@ -278,12 +298,17 @@
         const audioPlayer = document.getElementById('audio-player');
         const playerContainer = document.getElementById('player-container');
 
+        // Menangkap semua slider
         const speedSlider = document.getElementById('speed-slider');
-        const pitchSlider = document.getElementById('pitch-slider'); // Dummy
+        const pitchSlider = document.getElementById('pitch-slider'); 
         const bassSlider = document.getElementById('bass-slider');
         const midSlider = document.getElementById('mid-slider');
         const trebleSlider = document.getElementById('treble-slider');
         const reverbSlider = document.getElementById('reverb-slider');
+        const panSlider = document.getElementById('pan-slider');
+        const delaySlider = document.getElementById('delay-slider');
+        const distSlider = document.getElementById('dist-slider');
+        const muffleSlider = document.getElementById('muffle-slider');
         const volumeSlider = document.getElementById('volume-slider');
 
         const canvas = document.getElementById('waveform');
@@ -294,6 +319,7 @@
         let audioCtx, source, analyser, bufferLength, dataArray;
         let bassFilter, midFilter, trebleFilter, volumeNode;
         let convolver, wetGain, dryGain;
+        let pannerNode, delayNode, delayMixGain, delayFeedback, distNode, muffleFilter;
 
         uploadArea.addEventListener('click', () => fileInput.click());
 
@@ -307,18 +333,31 @@
             }
         });
 
-        // FUNGSI MEMBUAT GEMA SINTETIS (IMPULSE RESPONSE)
         function createReverbBuffer(ctx) {
-            const length = ctx.sampleRate * 2.5; // Gema berdurasi 2.5 detik
+            const length = ctx.sampleRate * 2.5;
             const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
             const left = impulse.getChannelData(0);
             const right = impulse.getChannelData(1);
             for (let i = 0; i < length; i++) {
-                const decay = Math.exp(-i / (ctx.sampleRate * 0.5)); // Efek suara memudar
+                const decay = Math.exp(-i / (ctx.sampleRate * 0.5));
                 left[i] = (Math.random() * 2 - 1) * decay;
                 right[i] = (Math.random() * 2 - 1) * decay;
             }
             return impulse;
+        }
+
+        // Fungsi matematika untuk merusak/mendistorsi gelombang suara
+        function makeDistortionCurve(amount) {
+            if (amount === 0) return new Float32Array([0, 0]); // Bypass
+            const k = amount;
+            const n_samples = 44100;
+            const curve = new Float32Array(n_samples);
+            const deg = Math.PI / 180;
+            for (let i = 0; i < n_samples; ++i) {
+                const x = i * 2 / n_samples - 1;
+                curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+            }
+            return curve;
         }
 
         function setupWebAudio() {
@@ -331,46 +370,75 @@
                 bufferLength = analyser.frequencyBinCount;
                 dataArray = new Uint8Array(bufferLength);
 
-                // Setup EQ
+                // Inisialisasi Filter Baru
+                muffleFilter = audioCtx.createBiquadFilter();
+                muffleFilter.type = 'lowpass';
+                muffleFilter.frequency.value = 22050; // Awalnya terbuka penuh (tidak diredam)
+
+                distNode = audioCtx.createWaveShaper();
+                distNode.curve = makeDistortionCurve(0);
+                distNode.oversample = '4x';
+
+                pannerNode = audioCtx.createStereoPanner();
+                pannerNode.pan.value = 0;
+
+                // Setup Delay
+                delayNode = audioCtx.createDelay();
+                delayNode.delayTime.value = 0.4; // Jeda pantulan 400ms
+                delayFeedback = audioCtx.createGain();
+                delayFeedback.gain.value = 0.4; // Panjangnya pantulan (feedback)
+                delayMixGain = audioCtx.createGain();
+                delayMixGain.gain.value = 0; // Volume delay awal (Mati)
+
+                // Setup EQ Dasar
                 bassFilter = audioCtx.createBiquadFilter(); 
                 bassFilter.type = 'lowshelf'; 
                 bassFilter.frequency.value = 150;
-
                 midFilter = audioCtx.createBiquadFilter(); 
                 midFilter.type = 'peaking'; 
                 midFilter.frequency.value = 1000;
-
                 trebleFilter = audioCtx.createBiquadFilter(); 
                 trebleFilter.type = 'highshelf'; 
                 trebleFilter.frequency.value = 4000;
 
-                // Setup Reverb & Volume
+                // Setup Reverb & Master Volume
                 convolver = audioCtx.createConvolver();
                 convolver.buffer = createReverbBuffer(audioCtx);
-                
                 dryGain = audioCtx.createGain();
                 wetGain = audioCtx.createGain();
-                wetGain.gain.value = 0; // Mulai dengan 0% reverb
-                
+                wetGain.gain.value = 0; 
                 volumeNode = audioCtx.createGain();
-                volumeNode.gain.value = 1; // 100% Volume
 
-                // Menyambungkan Kabel Audio API
-                source.connect(bassFilter);
+                // --------------------------------------------------
+                // ARSITEKTUR KABEL (ROUTING SIGNAL)
+                // --------------------------------------------------
+                // Rantai Linier: Source -> Muffle -> Distorsi -> EQ -> Panning
+                source.connect(muffleFilter);
+                muffleFilter.connect(distNode);
+                distNode.connect(bassFilter);
                 bassFilter.connect(midFilter);
                 midFilter.connect(trebleFilter);
+                trebleFilter.connect(pannerNode);
+
+                // Memecah Sinyal dari Panner ke 3 Jalur: Suara Asli, Gema, dan Pantulan
+                pannerNode.connect(dryGain);
+                pannerNode.connect(wetGain);
+                pannerNode.connect(delayNode);
                 
-                // Memecah sinyal menjadi dua: asli (dry) dan gema (wet)
-                trebleFilter.connect(dryGain);
-                trebleFilter.connect(wetGain);
-                
+                // Jalur Gema (Reverb)
                 wetGain.connect(convolver);
                 
-                // Menggabungkan kembali sebelum masuk volume
+                // Jalur Pantulan (Delay)
+                delayNode.connect(delayFeedback);
+                delayFeedback.connect(delayNode); // Looping pantulan
+                delayNode.connect(delayMixGain);
+                
+                // Menggabungkan kembali 3 jalur ke Master Volume
                 dryGain.connect(volumeNode);
                 convolver.connect(volumeNode);
+                delayMixGain.connect(volumeNode);
 
-                // Ke Visualisasi lalu ke Speaker
+                // Visualisasi & Speaker
                 volumeNode.connect(analyser);
                 analyser.connect(audioCtx.destination);
 
@@ -390,7 +458,6 @@
 
             const sliceWidth = canvas.width * 1.0 / bufferLength;
             let x = 0;
-
             for (let i = 0; i < bufferLength; i++) {
                 const v = dataArray[i] / 128.0;
                 const y = v * canvas.height / 2;
@@ -402,50 +469,78 @@
             canvasCtx.stroke();
         }
 
-        // EVENT LISTENERS SLIDER
+        // --- EVENT LISTENERS SLIDER LAMA ---
         speedSlider.addEventListener('input', (e) => {
             audioPlayer.playbackRate = e.target.value;
             document.getElementById('speed-val').innerText = e.target.value + 'x';
         });
-
         pitchSlider.addEventListener('input', (e) => {
             document.getElementById('pitch-val').innerText = e.target.value + ' ST';
         });
-
         bassSlider.addEventListener('input', (e) => {
             if (bassFilter) bassFilter.gain.value = e.target.value;
             document.getElementById('bass-val').innerText = e.target.value + ' dB';
         });
-
         midSlider.addEventListener('input', (e) => {
             if (midFilter) midFilter.gain.value = e.target.value;
             document.getElementById('mid-val').innerText = e.target.value + ' dB';
         });
-
         trebleSlider.addEventListener('input', (e) => {
             if (trebleFilter) trebleFilter.gain.value = e.target.value;
             document.getElementById('treble-val').innerText = e.target.value + ' dB';
         });
-
         reverbSlider.addEventListener('input', (e) => {
             const val = e.target.value;
             if (wetGain && dryGain) {
-                wetGain.gain.value = val / 100; // Naikkan efek gema
-                dryGain.gain.value = 1 - (val / 200); // Turunkan sedikit suara asli agar tidak pecah
+                wetGain.gain.value = val / 100;
+                dryGain.gain.value = 1 - (val / 200);
             }
             document.getElementById('reverb-val').innerText = val + '%';
         });
-
         volumeSlider.addEventListener('input', (e) => {
             if (volumeNode) volumeNode.gain.value = e.target.value / 100;
             document.getElementById('volume-val').innerText = e.target.value + '%';
         });
 
-        // PRESET DATA TERBARU
+        // --- EVENT LISTENERS SLIDER BARU ---
+        panSlider.addEventListener('input', (e) => {
+            if (pannerNode) pannerNode.pan.value = e.target.value;
+            let label = 'CENTER';
+            if (e.target.value < 0) label = 'LEFT ' + Math.abs(e.target.value * 100).toFixed(0) + '%';
+            if (e.target.value > 0) label = 'RIGHT ' + (e.target.value * 100).toFixed(0) + '%';
+            document.getElementById('pan-val').innerText = label;
+        });
+
+        delaySlider.addEventListener('input', (e) => {
+            if (delayMixGain) delayMixGain.gain.value = e.target.value / 100;
+            document.getElementById('delay-val').innerText = e.target.value + '%';
+        });
+
+        distSlider.addEventListener('input', (e) => {
+            if (distNode) {
+                // Konversi 0-100 menjadi nilai distorsi matematika yang ekstrim
+                const amount = parseInt(e.target.value) * 5; 
+                distNode.curve = makeDistortionCurve(amount);
+            }
+            document.getElementById('dist-val').innerText = e.target.value + '%';
+        });
+
+        muffleSlider.addEventListener('input', (e) => {
+            if (muffleFilter) {
+                // Menghitung logaritma frekuensi dari 22050Hz (terbuka) turun ke 300Hz (sangat teredam)
+                const val = e.target.value / 100;
+                const minFreq = 300;
+                const maxFreq = 22050;
+                muffleFilter.frequency.value = maxFreq * Math.pow(minFreq / maxFreq, val);
+            }
+            document.getElementById('muffle-val').innerText = e.target.value + '%';
+        });
+
+        // PRESET DATA DIPERBARUI UNTUK MENDUKUNG FX BARU
         const presetsData = {
-            'clean': { speed: 1.0, pitch: 0, bass: 0, mid: 0, treble: 0, reverb: 0, volume: 100 },
-            'bassBoost': { speed: 1.0, pitch: 0, bass: 12, mid: -2, treble: 2, reverb: 5, volume: 100 },
-            'slowed': { speed: 0.8, pitch: 0, bass: 6, mid: 0, treble: -2, reverb: 40, volume: 100 } // Reverb dinaikkan untuk efek Slowed+Reverb!
+            'clean': { speed: 1.0, bass: 0, mid: 0, treble: 0, reverb: 0, pan: 0, delay: 0, dist: 0, muffle: 0, volume: 100 },
+            'lofi': { speed: 0.9, bass: 6, mid: 4, treble: -8, reverb: 15, pan: 0, delay: 0, dist: 15, muffle: 60, volume: 110 },
+            '8d': { speed: 1.0, bass: 10, mid: 0, treble: 4, reverb: 40, pan: -0.5, delay: 30, dist: 0, muffle: 10, volume: 90 }
         };
 
         document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -453,14 +548,17 @@
                 const p = presetsData[e.target.getAttribute('data-preset')];
                 
                 speedSlider.value = p.speed;
-                pitchSlider.value = p.pitch;
                 bassSlider.value = p.bass;
                 midSlider.value = p.mid;
                 trebleSlider.value = p.treble;
                 reverbSlider.value = p.reverb;
+                panSlider.value = p.pan;
+                delaySlider.value = p.delay;
+                distSlider.value = p.dist;
+                muffleSlider.value = p.muffle;
                 volumeSlider.value = p.volume;
 
-                [speedSlider, pitchSlider, bassSlider, midSlider, trebleSlider, reverbSlider, volumeSlider].forEach(slider => {
+                [speedSlider, bassSlider, midSlider, trebleSlider, reverbSlider, panSlider, delaySlider, distSlider, muffleSlider, volumeSlider].forEach(slider => {
                     slider.dispatchEvent(new Event('input'));
                 });
             });
